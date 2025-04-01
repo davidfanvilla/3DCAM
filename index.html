@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Visualizador 3D - Versión Móvil</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            background: #000; 
+            overflow: hidden; 
+            touch-action: none; 
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #status {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            color: lime;
+            font-family: monospace;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            z-index: 100;
+            font-size: 14px;
+        }
+        .instructions {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            z-index: 100;
+            font-size: 14px;
+            border-radius: 5px;
+        }
+        .controls {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .controls button {
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.5);
+            color: white;
+            padding: 8px 15px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+        }
+        .controls button:active {
+            background: rgba(255,255,255,0.4);
+        }
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-family: Arial;
+            z-index: 1000;
+        }
+        #loading .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        @media (max-width: 768px) {
+            .instructions { font-size: 12px; }
+            .controls button { font-size: 14px; padding: 6px 12px; }
+        }
+    </style>
+    <!-- Cargamos p5.js y p5.sound -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/addons/p5.sound.min.js"></script>
+</head>
+<body>
+    <div id="loading">
+        <div class="spinner"></div>
+        <p>Cargando visualizador 3D...</p>
+        <p id="loadingText">Espera un momento...</p>
+    </div>
+    
+    <div id="status">Inicializando...</div>
+    
+    <div class="controls">
+        <button id="btnPhoto">Foto</button>
+        <button id="btnRecord">Grabar</button>
+        <button id="btnEffect">Efecto +</button>
+    </div>
+    
+    <div class="instructions">
+        <p>• Desliza para rotar</p>
+        <p>• Pinza para zoom</p>
+    </div>
+
+    <script>
+        // Variables globales
+        let video;
+        let mic;
+        let offset = 0;
+        let recording = false;
+        let statusElement;
+        let loadingElement;
+        let loadingTextElement;
+        let chunks = [];
+        let recorder;
+        let isMobile = false;
+        let canRecord = false;
+        
+        // Variables para efectos 3D
+        let depthFactor = 1.5;      // Factor de profundidad
+        let pointSize = 3;          // Tamaño de los puntos
+        let pointDensity = 3;       // Densidad de los puntos (menor = más denso)
+        let effectIntensity = 1.0;  // Intensidad del efecto de audio
+        
+        // Variables para simular cámara 3D
+        let rotX = 0;
+        let rotY = 0;
+        let zoom = 500;
+        let targetRotX = 0;
+        let targetRotY = 0;
+        let targetZoom = 500;
+        
+        // Variables táctiles
+        let touches = [];
+        let lastPinchDist = 0;
+        
+        // Detectar dispositivo
+        function detectDevice() {
+            isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            canRecord = (typeof MediaRecorder !== 'undefined');
+            
+            // Ajustar configuración según el dispositivo
+            if (isMobile) {
+                pointSize = 2.5;
+                pointDensity = 4; // Menor densidad de puntos para dispositivos móviles
+            }
+            
+            updateLoadingText("Detectado: " + (isMobile ? "Dispositivo móvil" : "Escritorio"));
+        }
+        
+        function updateLoadingText(text) {
+            if (loadingTextElement) {
+                loadingTextElement.textContent = text;
+            }
+        }
+        
+        function hideLoading() {
+            if (loadingElement) {
+                loadingElement.style.display = 'none';
+            }
+        }
+
+        function setup() {
+            createCanvas(windowWidth, windowHeight, WEBGL);
+            statusElement = document.getElementById('status');
+            loadingElement = document.getElementById('loading');
+            loadingTextElement = document.getElementById('loadingText');
+            
+            // Detectar dispositivo
+            detectDevice();
+            
+            updateLoadingText("Solicitando acceso a la cámara...");
+            
+            // Configuración de cámara apropiada para dispositivos
+            let constraints = {
+                video: {
+                    facingMode: "user",
+                    width: { ideal: isMobile ? 480 : 640 },
+                    height: { ideal: isMobile ? 360 : 480 }
+                }
+            };
+            
+            // Iniciar cámara
+            video = createCapture(constraints);
+            video.elt.onloadedmetadata = function() {
+                updateLoadingText("Cámara activada, configurando audio...");
+            };
+            video.hide();
+            
+            // Iniciar audio
+            userStartAudio().then(() => {
+                mic = new p5.AudioIn();
+                mic.start();
+                updateLoadingText("Audio iniciado, configurando efectos...");
+                
+                // Una vez que todo está listo, quitar la pantalla de carga
+                setTimeout(hideLoading, 1500);
+            }).catch(e => {
+                updateStatus("⚠️ Sin acceso a micrófono: " + e.message);
+                setTimeout(hideLoading, 1500);
+            });
+            
+            // Configurar grabación si está disponible
+            if (canRecord) {
+                setupRecorder();
+            } else {
+                document.getElementById('btnRecord').style.display = 'none';
+                updateStatus("⚠️ Grabación no disponible en este navegador");
+            }
+            
+            // Configurar botones
+            document.getElementById('btnPhoto').addEventListener('click', takePhoto);
+            document.getElementById('btnRecord').addEventListener('click', toggleRecording);
+            document.getElementById('btnEffect').addEventListener('click', cycleEffect);
+            
+            // Optimizaciones
+            frameRate(isMobile ? 30 : 60);
+            pixelDensity(1);
+            perspective(PI/3, width/height, 1, 5000);
+            
+            // Suavizar la rotación
+            rotX = 0.2; // Pequeña rotación inicial para mostrar el 3D
+            targetRotX = rotX;
+        }
+
+        function setupRecorder() {
+            try {
+                const stream = document.querySelector('canvas').captureStream(30);
+                recorder = new MediaRecorder(stream);
+                
+                recorder.ondataavailable = e => {
+                    if (e.data.size) {
+                        chunks.push(e.data);
+                    }
+                };
+                
+                recorder.onstop = () => {
+                    const blob = new Blob(chunks, { type: 'video/webm' });
+                    chunks = [];
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    document.body.appendChild(a);
+                    a.style = 'display: none';
+                    a.href = url;
+                    a.download = 'video-3d-' + Date.now() + '.webm';
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    updateStatus("✅ Grabación guardada");
+                };
+                updateLoadingText("Grabación configurada");
+            } catch (e) {
+                updateStatus("⚠️ Error al configurar grabación: " + e.message);
+                canRecord = false;
+                document.getElementById('btnRecord').style.display = 'none';
+            }
+        }
+
+        function updateStatus(message) {
+            if (statusElement) {
+                statusElement.innerHTML = message;
+            }
+            console.log(message);
+        }
+
+        function takePhoto() {
+            saveCanvas('foto-3d-' + Date.now(), 'png');
+            updateStatus('📸 Imagen guardada');
+        }
+        
+        function toggleRecording() {
+            if (!canRecord) return;
+            
+            recording = !recording;
+            if (recording) {
+                chunks = [];
+                recorder.start();
+                updateStatus('🔴 Grabando...');
+                document.getElementById('btnRecord').textContent = "Detener";
+            } else {
+                recorder.stop();
+                updateStatus('⏳ Procesando grabación...');
+                document.getElementById('btnRecord').textContent = "Grabar";
+            }
+        }
+        
+        function cycleEffect() {
+            // Ciclo entre diferentes configuraciones de efectos
+            if (depthFactor == 1.5) {
+                depthFactor = 2.5;
+                effectIntensity = 1.5;
+                updateStatus("🌊 Efecto: Ondas intensas");
+            } else if (depthFactor == 2.5) {
+                depthFactor = 3.5;
+                effectIntensity = 2.0;
+                updateStatus("🏔️ Efecto: Montañas");
+            } else {
+                depthFactor = 1.5;
+                effectIntensity = 1.0;
+                updateStatus("🌈 Efecto: Normal");
+            }
+        }
+
+        function draw() {
+            background(0);
+            
+            // Suavizar movimientos de cámara
+            rotX = lerp(rotX, targetRotX, 0.1);
+            rotY = lerp(rotY, targetRotY, 0.1);
+            zoom = lerp(zoom, targetZoom, 0.1);
+            
+            // Actualizar controles de cámara
+            translate(0, 0, -zoom);
+            rotateX(rotY);
+            rotateY(rotX);
+            
+            // Dibujar sólo si el video está listo
+            if (video.loadedmetadata && video.width > 0) {                
+                // Obtener el nivel de audio
+                let volume = mic ? mic.getLevel() * 2000 * effectIntensity : 0;
+                offset += 0.05;
+                
+                // Cargar pixels de video
+                video.loadPixels();
+                
+                // Centro del video
+                let centerX = video.width / 2;
+                let centerY = video.height / 2;
+                
+                // Calcular factor de escala para que llene bien la pantalla
+                let scaleFactor = min(width / video.width, height / video.height) * 1.2;
+                
+                // Configurar el estilo para los puntos
+                strokeWeight(pointSize);
+                
+                // Aplicar iluminación para mejorar el efecto 3D
+                ambientLight(50);
+                directionalLight(255, 255, 255, 0, 0.5, -1);
+                
+                // Dibujar los puntos con efecto 3D mejorado
+                for (let y = 0; y < video.height; y += pointDensity) {
+                    beginShape(POINTS);
+                    for (let x = 0; x < video.width; x += pointDensity) {
+                        // Obtener el color exacto del pixel de la cámara
+                        let index = (y * video.width + x) * 4;
+                        let r = video.pixels[index];
+                        let g = video.pixels[index + 1];
+                        let b = video.pixels[index + 2];
+                        
+                        // Solo dibujar si el pixel tiene suficiente información (no es negro)
+                        if (r + g + b > 15) {
+                            // Aplicar el color real al punto
+                            stroke(r, g, b, 240); // Añadir un poco de transparencia para mejorar el efecto
+                            
+                            // Calcular la posición Z basada en el brillo, con mayor rango de profundidad
+                            let brightness = (r * 0.299 + g * 0.587 + b * 0.114); // Fórmula precisa de brillo
+                            let zPos = map(brightness, 0, 255, -200 * depthFactor, 100);
+                            
+                            // Aplicar efecto de onda basado en el audio con más variación
+                            let d = dist(x, y, centerX, centerY);
+                            zPos += sin(d/10 + offset) * volume * 0.5;
+                            zPos += cos(d/15 - offset * 0.7) * volume * 0.3; // Efecto secundario para más complejidad
+                            
+                            // Escalar para llenar la pantalla apropiadamente
+                            let xPos = (x - centerX) * scaleFactor;
+                            let yPos = (y - centerY) * scaleFactor;
+                            
+                            // Dibujar el punto en el espacio 3D
+                            vertex(xPos, yPos, zPos);
+                        }
+                    }
+                    endShape();
+                }
+                
+                // Actualizar mensaje de estado ocasionalmente
+                if (frameCount % 60 === 0 && !recording) {
+                    updateStatus(`✓ ${floor(frameRate())} FPS`);
+                }
+            }
+        }
+
+        // Manejo de eventos táctiles
+        function touchStarted() {
+            touches = touches || [];
+            
+            // Detectar multipunto para zoom con pellizco
+            if (touches.length >= 2) {
+                let d = dist(
+                    touches[0].x, touches[0].y,
+                    touches[1].x, touches[1].y
+                );
+                lastPinchDist = d;
+            } else {
+                // Un solo toque para rotación
+                lastTouchX = mouseX;
+                lastTouchY = mouseY;
+            }
+            return false;
+        }
+
+        function touchMoved() {
+            // Manejo de gestos multitouch
+            if (touches.length >= 2) {
+                // Zoom con pellizco
+                let d = dist(
+                    touches[0].x, touches[0].y,
+                    touches[1].x, touches[1].y
+                );
+                let delta = d - lastPinchDist;
+                targetZoom -= delta * 2;
+                targetZoom = constrain(targetZoom, 50, 2000);
+                lastPinchDist = d;
+            } else {
+                // Rotación con un dedo
+                let dx = mouseX - lastTouchX;
+                let dy = mouseY - lastTouchY;
+                
+                targetRotX += dx * 0.01;
+                targetRotY += dy * 0.01;
+                
+                lastTouchX = mouseX;
+                lastTouchY = mouseY;
+            }
+            return false;
+        }
+        
+        // Soporte para ratón en escritorio
+        function mouseWheel(event) {
+            targetZoom += event.delta;
+            targetZoom = constrain(targetZoom, 50, 2000);
+            return false;
+        }
+        
+        function mouseDragged() {
+            if (mouseButton === LEFT) {
+                let dx = mouseX - pmouseX;
+                let dy = mouseY - pmouseY;
+                
+                targetRotX += dx * 0.01;
+                targetRotY += dy * 0.01;
+            }
+            return false;
+        }
+
+        function keyPressed() {
+            if (key === 's' || key === 'S') {
+                takePhoto();
+            } else if (key === 'r' || key === 'R') {
+                toggleRecording();
+            } else if (key === 'e' || key === 'E') {
+                cycleEffect();
+            }
+        }
+
+        function windowResized() {
+            resizeCanvas(windowWidth, windowHeight);
+            perspective(PI/3, width/height, 1, 5000);
+        }
+    </script>
+</body>
+</html>
