@@ -91,10 +91,21 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            outline: none;      /* Eliminar contorno al hacer focus */
+            touch-action: manipulation; /* Optimizar para touch */
+            -webkit-tap-highlight-color: transparent; /* Eliminar highlight en iOS */
         }
         .control-button:active {
             background: rgba(255,255,255,0.4);
             transform: scale(0.95);
+        }
+        /* Estilos específicos para móviles y tablets */
+        @media (max-width: 768px) {
+            .control-button {
+                font-size: 15px;
+                padding: 14px 20px; /* Botones más altos en móviles */
+                margin-bottom: 5px; /* Más separación entre botones */
+            }
         }
         #loading {
             position: fixed;
@@ -146,8 +157,17 @@
         }
         @media (max-width: 768px) {
             .instructions { font-size: 12px; }
-            .control-button { font-size: 14px; padding: 10px 15px; }
+            .control-button { font-size: 14px; padding: 12px 16px; }
             .audio-meter { width: 150px; }
+        }
+        /* Animación para feedback táctil */
+        @keyframes buttonPress {
+            0% { transform: scale(1); }
+            50% { transform: scale(0.95); }
+            100% { transform: scale(1); }
+        }
+        .button-pressed {
+            animation: buttonPress 0.3s ease;
         }
     </style>
 </head>
@@ -206,6 +226,7 @@
         let canRecord = false;
         let usingBackCamera = false;
         let easycam;
+        let hasBeenTouched = false; // Para detectar interacción inicial
         
         // Variables para efectos 3D
         let depthFactor = 2.0;     // Factor de profundidad
@@ -217,9 +238,35 @@
         // Variables de renderizado
         let audioLevel = 0;
         let sampledColor = [255, 255, 255];
+        
+        // Variables para manejo de eventos de cámara
+        let canUseCameras = false;
+        let canRenderScene = false;
 
         // Elementos del DOM - referencias globales
         let photoButton, recordButton, effectButton, previewButton, cameraButton;
+        
+        // Detectar vibración
+        const canVibrate = "vibrate" in navigator;
+        
+        // Función para dar feedback táctil
+        function vibrateDevice(duration = 50) {
+            if (canVibrate) {
+                try {
+                    navigator.vibrate(duration);
+                } catch (e) {
+                    console.log("Vibración no soportada");
+                }
+            }
+        }
+        
+        // Función mejorada para animación de botones
+        function animateButton(button) {
+            button.classList.add("button-pressed");
+            setTimeout(() => {
+                button.classList.remove("button-pressed");
+            }, 300);
+        }
         
         window.onload = function() {
             // Configurar referencias a elementos DOM
@@ -237,13 +284,6 @@
             previewButton = document.getElementById('previewButton');
             cameraButton = document.getElementById('cameraButton');
             
-            // Agregar event listeners
-            photoButton.addEventListener('click', takePhoto);
-            recordButton.addEventListener('click', toggleRecording);
-            effectButton.addEventListener('click', cycleEffect);
-            previewButton.addEventListener('click', togglePreview);
-            cameraButton.addEventListener('click', toggleCamera);
-            
             // Detectar tipo de dispositivo para optimizar configuración
             detectDevice();
             
@@ -253,8 +293,66 @@
                 recordButton.style.display = 'none';
             }
             
+            // Agregar manejadores optimizados para dispositivos táctiles
+            setupTouchControls();
+            
+            // Prevenir gestos del navegador en dispositivos táctiles
+            document.addEventListener('gesturestart', function(e) {
+                e.preventDefault();
+            });
+            
+            document.addEventListener('touchmove', function(e) {
+                if (e.target.closest('.control-button')) {
+                    e.preventDefault(); // Prevenir scroll cuando tocas botones
+                }
+            }, { passive: false });
+            
             updateLoadingText("Configuración inicial completada");
         };
+        
+        // Configurar controladores táctiles optimizados
+        function setupTouchControls() {
+            // Función para manejar todos los eventos táctiles en botones
+            function setupButtonEvents(button, action) {
+                ['touchstart', 'mousedown'].forEach(eventType => {
+                    button.addEventListener(eventType, function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        vibrateDevice();
+                        animateButton(this);
+                        
+                        // En dispositivos iOS, es mejor disparar la acción en touchstart
+                        if (isMobile && eventType === 'touchstart') {
+                            action();
+                        }
+                        // En desktop, esperar al click real
+                        if (!isMobile && eventType === 'mousedown') {
+                            action();
+                        }
+                        
+                        return false;
+                    }, { passive: false });
+                });
+                
+                // Para asegurar compatibilidad con todos los dispositivos
+                button.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    // Solo ejecutar en dispositivos que no sean móviles o si no se ha manejado ya
+                    if (!hasBeenTouched) {
+                        action();
+                    }
+                    hasBeenTouched = false;
+                    return false;
+                }, { passive: false });
+            }
+            
+            // Configurar cada botón con su acción correspondiente
+            setupButtonEvents(photoButton, takePhoto);
+            setupButtonEvents(recordButton, toggleRecording);
+            setupButtonEvents(effectButton, cycleEffect);
+            setupButtonEvents(previewButton, togglePreview);
+            setupButtonEvents(cameraButton, toggleCamera);
+        }
 
         function detectDevice() {
             // Detectar dispositivo: móvil, tablet o desktop
@@ -289,10 +387,17 @@
             updateLoadingText("Creando lienzo...");
             canvas = createCanvas(windowWidth, windowHeight, WEBGL);
             
-            // Inicializar EasyCam
+            // Inicializar EasyCam con parámetros adaptados para mobiles y táctiles
             easycam = createEasyCam();
             easycam.setDistanceMin(30);
             easycam.setDistanceMax(3000);
+            
+            // Ajustes especiales de EasyCam para dispositivos táctiles
+            if (isMobile) {
+                easycam.setRotationConstraint(true, true, true); // Restringir rotación para mejor control
+                easycam.setPanConstraint(true, true, true); // Restringir panning
+                easycam.setDampingScale(0.7); // Menos inercia para mejor control
+            }
             
             updateLoadingText("Solicitando acceso a la cámara...");
             startCapture(usingBackCamera);
@@ -340,6 +445,9 @@
             video = createCapture(constraints, function(stream) {
                 if (stream.active) {
                     console.log("Captura de video iniciada.");
+                    canRenderScene = true;
+                    canUseCameras = true;
+                    
                     // Crear un video preview pequeño
                     if (previewElement.firstChild) {
                         previewElement.removeChild(previewElement.firstChild);
@@ -355,15 +463,25 @@
                     previewElement.appendChild(preview);
                 } else {
                     console.log("No se encontraron dispositivos de captura.");
+                    canRenderScene = false;
+                    updateStatus("⚠️ Error al acceder a la cámara");
                 }
             });
             video.hide();
         }
 
         function toggleCamera() {
+            if (!canUseCameras) {
+                updateStatus("⚠️ No se detectaron cámaras disponibles");
+                return;
+            }
+            
             usingBackCamera = !usingBackCamera;
             updateStatus(usingBackCamera ? "📹 Usando cámara trasera" : "📹 Usando cámara frontal");
             startCapture(usingBackCamera);
+            
+            // Feedback visual y táctil
+            vibrateDevice(100); // Vibración más larga para cambio de cámara
         }
 
         function setupRecorder() {
@@ -405,6 +523,9 @@
             saveCanvas('visual3d-' + Date.now(), 'png');
             updateStatus('📸 Imagen guardada');
             
+            // Feedback táctil
+            vibrateDevice();
+            
             // Efecto visual de flash
             let flash = document.createElement('div');
             flash.style.position = 'fixed';
@@ -437,11 +558,13 @@
                 updateStatus('🔴 Grabando...');
                 recordButton.textContent = "⏹️ Detener";
                 recordButton.style.backgroundColor = "rgba(255,0,0,0.4)";
+                vibrateDevice(100); // Vibración más larga al iniciar grabación
             } else {
                 recorder.stop();
                 updateStatus('⏳ Procesando grabación...');
                 recordButton.textContent = "🔴 Grabar";
                 recordButton.style.backgroundColor = "rgba(255,255,255,0.2)";
+                vibrateDevice([50, 50, 150]); // Patrón de vibración al detener
             }
         }
         
@@ -459,12 +582,14 @@
                 effectIntensity = 1.0;
                 updateStatus("🌈 Efecto: Normal");
             }
+            vibrateDevice();
         }
         
         function togglePreview() {
             showPreview = !showPreview;
             previewElement.style.display = showPreview ? 'block' : 'none';
             updateStatus(showPreview ? "👁️ Previsualización activada" : "👁️ Previsualización desactivada");
+            vibrateDevice();
         }
 
         function draw() {
@@ -477,8 +602,8 @@
                 audioMeterFill.style.width = decibelPercentage + "%";
             }
             
-            // Dibujar sólo si el video está listo
-            if (video && video.loadedmetadata && video.width > 0) {                
+            // Dibujar sólo si el video está listo y podemos renderizar
+            if (video && video.loadedmetadata && video.width > 0 && canRenderScene) {                
                 // Obtener el nivel de audio para efectos visuales
                 let volume = audioLevel * 2000 * effectIntensity;
                 offset += 0.05;
@@ -536,13 +661,30 @@
             }
         }
 
-        // Manejo de eventos táctiles
+        // Manejo de eventos táctiles para canvas de p5
         function touchStarted() {
-            if (touches.length === 2) {
-                // Tomar foto con dos dedos
-                takePhoto();
+            // Marcar que ha habido interacción táctil
+            hasBeenTouched = true;
+            
+            // Verificar si el toque fue en un botón (para evitar conflictos)
+            for (let i = 0; i < touches.length; i++) {
+                let touch = touches[i];
+                let element = document.elementFromPoint(touch.x, touch.y);
+                if (element && element.classList.contains('control-button')) {
+                    return false; // No hacer nada si tocamos un botón
+                }
             }
-            return false;
+            
+            // Detectar gesto de dos dedos para tomar foto
+            if (touches.length === 2) {
+                let d = dist(touches[0].x, touches[0].y, touches[1].x, touches[1].y);
+                if (d < 100) { // Si los dedos están cerca, toma una foto
+                    takePhoto();
+                    return false;
+                }
+            }
+            
+            return false; // Prevenir comportamiento por defecto
         }
 
         function windowResized() {
