@@ -70,17 +70,17 @@
             position: fixed;
             top: 10px;
             right: 10px;
-            z-index: 100;
+            z-index: 200; /* Mayor que el canvas para asegurar que recibe eventos táctiles */
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px; /* Espaciado más compacto */
         }
         .control-button {
             background: rgba(255,255,255,0.2);
             border: none;
             color: white;
-            padding: 12px 20px;
-            font-size: 16px;
+            padding: 8px 12px; /* Botones más pequeños */
+            font-size: 14px; /* Texto más pequeño */
             border-radius: 8px;
             cursor: pointer;
             backdrop-filter: blur(5px);
@@ -91,9 +91,9 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            outline: none;      /* Eliminar contorno al hacer focus */
-            touch-action: manipulation; /* Optimizar para touch */
-            -webkit-tap-highlight-color: transparent; /* Eliminar highlight en iOS */
+            outline: none;      
+            touch-action: manipulation; 
+            -webkit-tap-highlight-color: transparent;
         }
         .control-button:active {
             background: rgba(255,255,255,0.4);
@@ -102,9 +102,9 @@
         /* Estilos específicos para móviles y tablets */
         @media (max-width: 768px) {
             .control-button {
-                font-size: 15px;
-                padding: 14px 20px; /* Botones más altos en móviles */
-                margin-bottom: 5px; /* Más separación entre botones */
+                font-size: 13px;
+                padding: 8px 10px; /* Botones aún más pequeños en móviles */
+                margin-bottom: 3px; /* Menos espacio entre botones */
             }
         }
         #loading {
@@ -157,7 +157,6 @@
         }
         @media (max-width: 768px) {
             .instructions { font-size: 12px; }
-            .control-button { font-size: 14px; padding: 12px 16px; }
             .audio-meter { width: 150px; }
         }
         /* Animación para feedback táctil */
@@ -188,7 +187,7 @@
         <button class="control-button" id="photoButton">📸 Foto</button>
         <button class="control-button" id="recordButton">🔴 Grabar</button>
         <button class="control-button" id="effectButton">🌈 Efecto</button>
-        <button class="control-button" id="cameraButton">📹 Cambiar cámara</button>
+        <button class="control-button" id="cameraButton">📹 Cambiar</button>
         <button class="control-button" id="previewButton">👁️ Previsualizar</button>
     </div>
     
@@ -207,7 +206,7 @@
     <script src="https://cdn.jsdelivr.net/npm/p5.easycam@1.0.0/p5.easycam.min.js"></script>
 
     <script>
-        // Variables globales
+        // Variables globales (sin cambios)
         let canvas;
         let video;
         let mic;
@@ -226,30 +225,30 @@
         let canRecord = false;
         let usingBackCamera = false;
         let easycam;
-        let hasBeenTouched = false; // Para detectar interacción inicial
+        let hasBeenTouched = false;
         
-        // Variables para efectos 3D
-        let depthFactor = 2.0;     // Factor de profundidad
-        let sphereSize = 3;        // Tamaño de las esferas
-        let pointDensity = 5;      // Densidad de los puntos (menor = más denso)
-        let mobilePointDensity = 8; // Densidad para móviles
-        let effectIntensity = 1.0;  // Intensidad del efecto de audio
+        // Variables para efectos 3D (sin cambios)
+        let depthFactor = 2.0;     
+        let sphereSize = 3;        
+        let pointDensity = 5;      
+        let mobilePointDensity = 8; 
+        let effectIntensity = 1.0;  
         
-        // Variables de renderizado
+        // Variables de renderizado (sin cambios)
         let audioLevel = 0;
         let sampledColor = [255, 255, 255];
         
-        // Variables para manejo de eventos de cámara
+        // Variables para manejo de eventos de cámara (sin cambios)
         let canUseCameras = false;
         let canRenderScene = false;
 
-        // Elementos del DOM - referencias globales
+        // Elementos del DOM - referencias globales (sin cambios)
         let photoButton, recordButton, effectButton, previewButton, cameraButton;
         
-        // Detectar vibración
+        // Detectar vibración (sin cambios)
         const canVibrate = "vibrate" in navigator;
         
-        // Función para dar feedback táctil
+        // Función para dar feedback táctil (sin cambios)
         function vibrateDevice(duration = 50) {
             if (canVibrate) {
                 try {
@@ -260,7 +259,7 @@
             }
         }
         
-        // Función mejorada para animación de botones
+        // Función mejorada para animación de botones (sin cambios)
         function animateButton(button) {
             button.classList.add("button-pressed");
             setTimeout(() => {
@@ -269,7 +268,7 @@
         }
         
         window.onload = function() {
-            // Configurar referencias a elementos DOM
+            // Configurar referencias a elementos DOM (sin cambios)
             statusElement = document.getElementById('status');
             loadingElement = document.getElementById('loading');
             loadingTextElement = document.getElementById('loadingText');
@@ -277,83 +276,87 @@
             colorSample = document.getElementById('colorSample');
             previewElement = document.getElementById('preview');
             
-            // Configurar botones
+            // Configurar botones (sin cambios)
             photoButton = document.getElementById('photoButton');
             recordButton = document.getElementById('recordButton');
             effectButton = document.getElementById('effectButton');
             previewButton = document.getElementById('previewButton');
             cameraButton = document.getElementById('cameraButton');
             
-            // Detectar tipo de dispositivo para optimizar configuración
+            // Detectar tipo de dispositivo para optimizar configuración (sin cambios)
             detectDevice();
             
-            // Detectar si el navegador soporta MediaRecorder
+            // Detectar si el navegador soporta MediaRecorder (sin cambios)
             canRecord = (typeof MediaRecorder !== 'undefined');
             if (!canRecord) {
                 recordButton.style.display = 'none';
             }
             
-            // Agregar manejadores optimizados para dispositivos táctiles
-            setupTouchControls();
+            // MODIFICADO: Implementación simplificada para soportar mejor los eventos táctiles
+            setupImprovedTouchControls();
             
-            // Prevenir gestos del navegador en dispositivos táctiles
+            // Prevenir gestos del navegador en dispositivos táctiles (sin cambios)
             document.addEventListener('gesturestart', function(e) {
                 e.preventDefault();
             });
             
             document.addEventListener('touchmove', function(e) {
                 if (e.target.closest('.control-button')) {
-                    e.preventDefault(); // Prevenir scroll cuando tocas botones
+                    e.preventDefault();
                 }
             }, { passive: false });
             
             updateLoadingText("Configuración inicial completada");
         };
         
-        // Configurar controladores táctiles optimizados
-        function setupTouchControls() {
-            // Función para manejar todos los eventos táctiles en botones
-            function setupButtonEvents(button, action) {
-                ['touchstart', 'mousedown'].forEach(eventType => {
-                    button.addEventListener(eventType, function(e) {
+        // MODIFICADO: Configuración mejorada de controles táctiles
+        function setupImprovedTouchControls() {
+            // Configuración simplificada para botones
+            photoButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                takePhoto();
+            });
+            
+            recordButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                toggleRecording();
+            });
+            
+            effectButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                cycleEffect();
+            });
+            
+            previewButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                togglePreview();
+            });
+            
+            cameraButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                toggleCamera();
+            });
+            
+            // Para dispositivos móviles, también asignar eventos touchstart
+            if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+                const addTouchHandler = (button, action) => {
+                    button.addEventListener('touchstart', function(e) {
                         e.preventDefault();
-                        e.stopPropagation();
+                        action();
                         vibrateDevice();
                         animateButton(this);
-                        
-                        // En dispositivos iOS, es mejor disparar la acción en touchstart
-                        if (isMobile && eventType === 'touchstart') {
-                            action();
-                        }
-                        // En desktop, esperar al click real
-                        if (!isMobile && eventType === 'mousedown') {
-                            action();
-                        }
-                        
-                        return false;
-                    }, { passive: false });
-                });
+                    }, {passive: false});
+                };
                 
-                // Para asegurar compatibilidad con todos los dispositivos
-                button.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    // Solo ejecutar en dispositivos que no sean móviles o si no se ha manejado ya
-                    if (!hasBeenTouched) {
-                        action();
-                    }
-                    hasBeenTouched = false;
-                    return false;
-                }, { passive: false });
+                addTouchHandler(photoButton, takePhoto);
+                addTouchHandler(recordButton, toggleRecording);
+                addTouchHandler(effectButton, cycleEffect);
+                addTouchHandler(previewButton, togglePreview);
+                addTouchHandler(cameraButton, toggleCamera);
             }
-            
-            // Configurar cada botón con su acción correspondiente
-            setupButtonEvents(photoButton, takePhoto);
-            setupButtonEvents(recordButton, toggleRecording);
-            setupButtonEvents(effectButton, cycleEffect);
-            setupButtonEvents(previewButton, togglePreview);
-            setupButtonEvents(cameraButton, toggleCamera);
         }
 
+        // El resto del código se mantiene exactamente igual
         function detectDevice() {
             // Detectar dispositivo: móvil, tablet o desktop
             const userAgent = navigator.userAgent.toLowerCase();
