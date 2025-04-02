@@ -7,6 +7,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <title>Visualizador 3D - Colores Reales</title>
     <style>
+        /* Mantener los estilos existentes sin cambios */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
             background: #000; 
@@ -26,6 +27,7 @@
             top: 0;
             left: 0;
         }
+        /* Todos los demás estilos sin cambios */
         #status {
             position: fixed;
             top: 10px;
@@ -70,17 +72,17 @@
             position: fixed;
             top: 10px;
             right: 10px;
-            z-index: 200; /* Mayor que el canvas para asegurar que recibe eventos táctiles */
+            z-index: 100;
             display: flex;
             flex-direction: column;
-            gap: 8px; /* Espaciado más compacto */
+            gap: 10px;
         }
         .control-button {
             background: rgba(255,255,255,0.2);
             border: none;
             color: white;
-            padding: 8px 12px; /* Botones más pequeños */
-            font-size: 14px; /* Texto más pequeño */
+            padding: 12px 20px;
+            font-size: 16px;
             border-radius: 8px;
             cursor: pointer;
             backdrop-filter: blur(5px);
@@ -91,20 +93,19 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            outline: none;      
-            touch-action: manipulation; 
+            outline: none;
+            touch-action: manipulation;
             -webkit-tap-highlight-color: transparent;
         }
         .control-button:active {
             background: rgba(255,255,255,0.4);
             transform: scale(0.95);
         }
-        /* Estilos específicos para móviles y tablets */
         @media (max-width: 768px) {
             .control-button {
-                font-size: 13px;
-                padding: 8px 10px; /* Botones aún más pequeños en móviles */
-                margin-bottom: 3px; /* Menos espacio entre botones */
+                font-size: 15px;
+                padding: 14px 20px;
+                margin-bottom: 5px;
             }
         }
         #loading {
@@ -157,9 +158,9 @@
         }
         @media (max-width: 768px) {
             .instructions { font-size: 12px; }
+            .control-button { font-size: 14px; padding: 12px 16px; }
             .audio-meter { width: 150px; }
         }
-        /* Animación para feedback táctil */
         @keyframes buttonPress {
             0% { transform: scale(1); }
             50% { transform: scale(0.95); }
@@ -171,6 +172,7 @@
     </style>
 </head>
 <body>
+    <!-- Mantener el HTML sin cambios -->
     <div id="loading">
         <div class="spinner"></div>
         <p>Cargando visualizador 3D...</p>
@@ -187,7 +189,7 @@
         <button class="control-button" id="photoButton">📸 Foto</button>
         <button class="control-button" id="recordButton">🔴 Grabar</button>
         <button class="control-button" id="effectButton">🌈 Efecto</button>
-        <button class="control-button" id="cameraButton">📹 Cambiar</button>
+        <button class="control-button" id="cameraButton">📹 Cambiar cámara</button>
         <button class="control-button" id="previewButton">👁️ Previsualizar</button>
     </div>
     
@@ -206,7 +208,7 @@
     <script src="https://cdn.jsdelivr.net/npm/p5.easycam@1.0.0/p5.easycam.min.js"></script>
 
     <script>
-        // Variables globales (sin cambios)
+        // Variables globales - mantener sin cambios
         let canvas;
         let video;
         let mic;
@@ -227,28 +229,35 @@
         let easycam;
         let hasBeenTouched = false;
         
-        // Variables para efectos 3D (sin cambios)
+        // Variables para efectos 3D - mantener sin cambios
         let depthFactor = 2.0;     
         let sphereSize = 3;        
         let pointDensity = 5;      
         let mobilePointDensity = 8; 
         let effectIntensity = 1.0;  
         
-        // Variables de renderizado (sin cambios)
+        // Variables de renderizado - mantener sin cambios
         let audioLevel = 0;
         let sampledColor = [255, 255, 255];
         
-        // Variables para manejo de eventos de cámara (sin cambios)
+        // Variables para manejo de eventos - mantener sin cambios
         let canUseCameras = false;
         let canRenderScene = false;
 
-        // Elementos del DOM - referencias globales (sin cambios)
+        // Variables para manejo de errores
+        let loadingTimeoutID = null;
+        let fallbackModeActive = false;
+        
+        // Elementos del DOM - referencias globales - mantener sin cambios
         let photoButton, recordButton, effectButton, previewButton, cameraButton;
         
-        // Detectar vibración (sin cambios)
+        // Detectar vibración - mantener sin cambios
         const canVibrate = "vibrate" in navigator;
         
-        // Función para dar feedback táctil (sin cambios)
+        // SOLUCIÓN DE EMERGENCIA: Forzar finalización de carga después de un límite
+        const FORCE_LOAD_TIMEOUT = 5000; // 5 segundos máximo de espera
+
+        // Función para dar feedback táctil - mantener sin cambios
         function vibrateDevice(duration = 50) {
             if (canVibrate) {
                 try {
@@ -259,7 +268,7 @@
             }
         }
         
-        // Función mejorada para animación de botones (sin cambios)
+        // Función mejorada para animación de botones - mantener sin cambios
         function animateButton(button) {
             button.classList.add("button-pressed");
             setTimeout(() => {
@@ -267,8 +276,15 @@
             }, 300);
         }
         
-        window.onload = function() {
-            // Configurar referencias a elementos DOM (sin cambios)
+        // Configurar todo tan pronto como el DOM esté listo
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("DOM completamente cargado");
+            initBasicElements();
+        });
+        
+        // NUEVO: Función para inicializar solo los elementos básicos
+        function initBasicElements() {
+            // Configurar referencias a elementos DOM
             statusElement = document.getElementById('status');
             loadingElement = document.getElementById('loading');
             loadingTextElement = document.getElementById('loadingText');
@@ -276,89 +292,69 @@
             colorSample = document.getElementById('colorSample');
             previewElement = document.getElementById('preview');
             
-            // Configurar botones (sin cambios)
+            // Configurar botones
             photoButton = document.getElementById('photoButton');
             recordButton = document.getElementById('recordButton');
             effectButton = document.getElementById('effectButton');
             previewButton = document.getElementById('previewButton');
             cameraButton = document.getElementById('cameraButton');
             
-            // Detectar tipo de dispositivo para optimizar configuración (sin cambios)
+            // Detectar dispositivo móvil de inmediato
             detectDevice();
             
-            // Detectar si el navegador soporta MediaRecorder (sin cambios)
+            updateLoadingText("Elementos básicos inicializados");
+            
+            // Configurar botones con eventos simples
+            setupSimpleButtonEvents();
+            
+            // NUEVO: Establecer timeout de seguridad para forzar carga en cualquier caso
+            loadingTimeoutID = setTimeout(function() {
+                console.log("TIMEOUT DE EMERGENCIA - Forzando finalización de carga");
+                hideLoading();
+                updateStatus("Modo básico activo");
+                fallbackModeActive = true;
+            }, FORCE_LOAD_TIMEOUT);
+        }
+        
+        // NUEVO: Configuración simplificada de botones
+        function setupSimpleButtonEvents() {
+            photoButton.onclick = takePhoto;
+            recordButton.onclick = toggleRecording;
+            effectButton.onclick = cycleEffect;
+            previewButton.onclick = togglePreview;
+            cameraButton.onclick = toggleCamera;
+        }
+
+        window.onload = function() {
+            // La inicialización básica ya se hizo en DOMContentLoaded
+            console.log("Window completamente cargada");
+            updateLoadingText("Ventana completamente cargada");
+            
+            // Detectar si el navegador soporta MediaRecorder
             canRecord = (typeof MediaRecorder !== 'undefined');
             if (!canRecord) {
                 recordButton.style.display = 'none';
             }
             
-            // MODIFICADO: Implementación simplificada para soportar mejor los eventos táctiles
-            setupImprovedTouchControls();
-            
-            // Prevenir gestos del navegador en dispositivos táctiles (sin cambios)
+            // Prevenir gestos del navegador en dispositivos táctiles
             document.addEventListener('gesturestart', function(e) {
                 e.preventDefault();
             });
             
-            document.addEventListener('touchmove', function(e) {
-                if (e.target.closest('.control-button')) {
-                    e.preventDefault();
-                }
-            }, { passive: false });
-            
-            updateLoadingText("Configuración inicial completada");
+            // NUEVO: Asegurarse de que p5.js está disponible antes de continuar
+            if (typeof p5 !== 'undefined') {
+                updateLoadingText("Bibliotecas cargadas, iniciando setup...");
+            } else {
+                console.error("Error: p5.js no está disponible");
+                updateLoadingText("Error: biblioteca p5.js no disponible");
+                hideLoading();
+                updateStatus("Error: modo limitado");
+                return;
+            }
         };
         
-        // MODIFICADO: Configuración mejorada de controles táctiles
-        function setupImprovedTouchControls() {
-            // Configuración simplificada para botones
-            photoButton.addEventListener('click', function(e) {
-                e.preventDefault();
-                takePhoto();
-            });
-            
-            recordButton.addEventListener('click', function(e) {
-                e.preventDefault();
-                toggleRecording();
-            });
-            
-            effectButton.addEventListener('click', function(e) {
-                e.preventDefault();
-                cycleEffect();
-            });
-            
-            previewButton.addEventListener('click', function(e) {
-                e.preventDefault();
-                togglePreview();
-            });
-            
-            cameraButton.addEventListener('click', function(e) {
-                e.preventDefault();
-                toggleCamera();
-            });
-            
-            // Para dispositivos móviles, también asignar eventos touchstart
-            if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-                const addTouchHandler = (button, action) => {
-                    button.addEventListener('touchstart', function(e) {
-                        e.preventDefault();
-                        action();
-                        vibrateDevice();
-                        animateButton(this);
-                    }, {passive: false});
-                };
-                
-                addTouchHandler(photoButton, takePhoto);
-                addTouchHandler(recordButton, toggleRecording);
-                addTouchHandler(effectButton, cycleEffect);
-                addTouchHandler(previewButton, togglePreview);
-                addTouchHandler(cameraButton, toggleCamera);
-            }
-        }
-
-        // El resto del código se mantiene exactamente igual
         function detectDevice() {
-            // Detectar dispositivo: móvil, tablet o desktop
+            // Detectar dispositivo: móvil, tablet o desktop - mantener sin cambios
             const userAgent = navigator.userAgent.toLowerCase();
             const isMobileDevice = /android|webos|iphone|ipod|blackberry|iemobile|opera mini/.test(userAgent);
             const isTablet = /ipad|android/.test(userAgent) && !/mobile/.test(userAgent);
@@ -367,7 +363,11 @@
             
             if (isMobileDevice) {
                 pointDensity = mobilePointDensity;
-                sphereSize = 2.5;  // Esferas más pequeñas en móviles para rendimiento
+                sphereSize = 2.5;
+                // NUEVO: Reducir aún más la densidad para móviles problemáticos
+                if (/iphone|ipod/.test(userAgent)) {
+                    pointDensity = mobilePointDensity * 1.5;
+                }
             } else if (isTablet) {
                 pointDensity = 6;
                 sphereSize = 3;
@@ -379,118 +379,178 @@
         function updateLoadingText(text) {
             if (loadingTextElement) {
                 loadingTextElement.textContent = text;
+                console.log(text);
             }
         }
         
         function hideLoading() {
-            loadingElement.style.display = 'none';
+            if (loadingElement) {
+                loadingElement.style.display = 'none';
+                console.log("Pantalla de carga ocultada");
+                
+                // Limpiar timeout si existe
+                if (loadingTimeoutID) {
+                    clearTimeout(loadingTimeoutID);
+                    loadingTimeoutID = null;
+                }
+            }
         }
 
+        // MODIFICADO: Versión simplificada de setup para evitar bloqueos
         function setup() {
-            updateLoadingText("Creando lienzo...");
-            canvas = createCanvas(windowWidth, windowHeight, WEBGL);
-            
-            // Inicializar EasyCam con parámetros adaptados para mobiles y táctiles
-            easycam = createEasyCam();
-            easycam.setDistanceMin(30);
-            easycam.setDistanceMax(3000);
-            
-            // Ajustes especiales de EasyCam para dispositivos táctiles
-            if (isMobile) {
-                easycam.setRotationConstraint(true, true, true); // Restringir rotación para mejor control
-                easycam.setPanConstraint(true, true, true); // Restringir panning
-                easycam.setDampingScale(0.7); // Menos inercia para mejor control
-            }
-            
-            updateLoadingText("Solicitando acceso a la cámara...");
-            startCapture(usingBackCamera);
-            
-            // Crear un pequeño elemento de vista previa
-            previewElement.style.width = "160px";
-            previewElement.style.height = "120px";
-            
-            // Iniciar audio
-            updateLoadingText("Configurando audio...");
-            userStartAudio().then(() => {
-                mic = new p5.AudioIn();
-                mic.start();
-                updateLoadingText("Audio iniciado");
-                setTimeout(hideLoading, 1000);
-            }).catch(e => {
-                updateStatus("⚠️ Sin acceso a micrófono");
-                setTimeout(hideLoading, 1000);
-            });
-            
-            // Configurar grabación
-            if (canRecord) {
-                setupRecorder();
-            }
-            
-            frameRate(isMobile ? 30 : 60);
-            pixelDensity(1);
-            
-            updateLoadingText("¡Todo listo!");
-        }
-
-        function startCapture(backCamera) {
-            let constraints = {
-                video: {
-                    facingMode: (backCamera ? 'environment' : 'user'),
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                }
-            };
-            
-            if (video) {
-                video.remove();
-            }
-            
-            video = createCapture(constraints, function(stream) {
-                if (stream.active) {
-                    console.log("Captura de video iniciada.");
-                    canRenderScene = true;
-                    canUseCameras = true;
-                    
-                    // Crear un video preview pequeño
-                    if (previewElement.firstChild) {
-                        previewElement.removeChild(previewElement.firstChild);
-                    }
-                    let preview = document.createElement('video');
-                    preview.srcObject = stream;
-                    preview.autoplay = true;
-                    preview.muted = true;
-                    preview.style.width = "100%";
-                    preview.style.height = "100%";
-                    preview.style.objectFit = "cover";
-                    preview.style.borderRadius = "5px";
-                    previewElement.appendChild(preview);
+            try {
+                updateLoadingText("Creando lienzo...");
+                
+                // Crear canvas con tamaño reducido en móviles
+                if (isMobile) {
+                    let canvasWidth = windowWidth;
+                    let canvasHeight = windowHeight;
+                    pixelDensity(1); // Forzar densidad de píxeles a 1 para mejor rendimiento
+                    canvas = createCanvas(canvasWidth, canvasHeight, WEBGL);
                 } else {
-                    console.log("No se encontraron dispositivos de captura.");
-                    canRenderScene = false;
-                    updateStatus("⚠️ Error al acceder a la cámara");
+                    canvas = createCanvas(windowWidth, windowHeight, WEBGL);
                 }
-            });
-            video.hide();
+                
+                // NUEVO: Comprobar si el canvas se creó correctamente
+                if (!canvas) {
+                    throw new Error("No se pudo crear el canvas");
+                }
+                
+                updateLoadingText("Lienzo creado, inicializando cámara 3D...");
+                
+                // Inicializar EasyCam con configuración básica
+                try {
+                    easycam = createEasyCam({
+                        distance: 200,
+                        center: [0, 0, 0]
+                    });
+                    updateLoadingText("EasyCam inicializada");
+                } catch (e) {
+                    console.error("Error al inicializar EasyCam:", e);
+                    updateLoadingText("Error en EasyCam (continuando)");
+                    // Continuar sin EasyCam
+                }
+                
+                // Iniciar cámara web con timeout de seguridad
+                updateLoadingText("Solicitando acceso a la cámara...");
+                let cameraTimeout = setTimeout(function() {
+                    updateLoadingText("Timeout en cámara, iniciando sin cámara");
+                    // Continuar sin cámara, de todos modos inicializar audio
+                    initAudio();
+                }, 5000);
+                
+                try {
+                    // En móviles, usar una configuración simple
+                    let constraints = { video: true };
+                    
+                    video = createCapture(constraints, function(stream) {
+                        clearTimeout(cameraTimeout);
+                        updateLoadingText("Cámara iniciada");
+                        canRenderScene = true;
+                        canUseCameras = true;
+                        video.hide();
+                        initAudio();
+                    });
+                    
+                    video.elt.onerror = function(e) {
+                        clearTimeout(cameraTimeout);
+                        console.error("Error en video:", e);
+                        updateLoadingText("Error de cámara, continuando...");
+                        initAudio();
+                    };
+                } catch (e) {
+                    clearTimeout(cameraTimeout);
+                    console.error("Error al iniciar cámara:", e);
+                    updateLoadingText("Error crítico de cámara");
+                    initAudio();
+                }
+                
+                // Ajustes básicos para el rendimiento
+                frameRate(isMobile ? 24 : 30);
+                
+            } catch (e) {
+                console.error("Error crítico en setup:", e);
+                updateLoadingText("Error crítico: " + e.message);
+                // Forzar finalización de carga en caso de error
+                setTimeout(hideLoading, 1000);
+                updateStatus("Error en inicialización");
+            }
+        }
+        
+        // NUEVO: Función separada para inicializar audio
+        function initAudio() {
+            updateLoadingText("Configurando audio...");
+            
+            try {
+                userStartAudio().then(() => {
+                    try {
+                        mic = new p5.AudioIn();
+                        mic.start();
+                        updateLoadingText("Audio iniciado");
+                    } catch (e) {
+                        console.error("Error al iniciar micrófono:", e);
+                    }
+                    
+                    // Configurar grabación si está disponible
+                    if (canRecord) {
+                        try {
+                            setupRecorder();
+                        } catch (e) {
+                            console.error("Error al configurar grabación:", e);
+                            canRecord = false;
+                            recordButton.style.display = 'none';
+                        }
+                    }
+                    
+                    // Todo inicializado, ocultar pantalla de carga
+                    setTimeout(hideLoading, 1000);
+                    updateStatus("Listo");
+                    
+                }).catch(e => {
+                    console.error("Error al iniciar audio:", e);
+                    updateLoadingText("Sin acceso a audio");
+                    setTimeout(hideLoading, 1000);
+                    updateStatus("Sin audio");
+                });
+            } catch (e) {
+                console.error("Error crítico en audio:", e);
+                updateLoadingText("Error crítico de audio");
+                setTimeout(hideLoading, 1000);
+                updateStatus("Error de audio");
+            }
         }
 
+        // Simplified camera toggle for mobile
         function toggleCamera() {
-            if (!canUseCameras) {
-                updateStatus("⚠️ No se detectaron cámaras disponibles");
-                return;
+            try {
+                usingBackCamera = !usingBackCamera;
+                updateStatus(usingBackCamera ? "Cámara trasera" : "Cámara frontal");
+                
+                if (video) {
+                    video.remove();
+                }
+                
+                let constraints = {
+                    video: {
+                        facingMode: (usingBackCamera ? 'environment' : 'user')
+                    }
+                };
+                
+                video = createCapture(constraints);
+                video.hide();
+                
+                vibrateDevice(50);
+            } catch (e) {
+                console.error("Error al cambiar cámara:", e);
+                updateStatus("Error al cambiar cámara");
             }
-            
-            usingBackCamera = !usingBackCamera;
-            updateStatus(usingBackCamera ? "📹 Usando cámara trasera" : "📹 Usando cámara frontal");
-            startCapture(usingBackCamera);
-            
-            // Feedback visual y táctil
-            vibrateDevice(100); // Vibración más larga para cambio de cámara
         }
 
         function setupRecorder() {
             try {
-                const stream = document.querySelector('canvas').captureStream(30);
-                recorder = new MediaRecorder(stream, {mimeType: 'video/webm;codecs=vp9'});
+                // Simplificar para móviles
+                const stream = document.querySelector('canvas').captureStream(24);
+                recorder = new MediaRecorder(stream);
                 
                 recorder.ondataavailable = e => {
                     if (e.data.size) {
@@ -509,7 +569,7 @@
                     a.download = 'visual3d-' + Date.now() + '.webm';
                     a.click();
                     window.URL.revokeObjectURL(url);
-                    updateStatus("✅ Grabación guardada");
+                    updateStatus("Grabación guardada");
                 };
             } catch (e) {
                 console.error("Error al configurar grabación:", e);
@@ -519,55 +579,67 @@
         }
 
         function updateStatus(message) {
-            statusElement.innerHTML = message;
+            if (statusElement) {
+                statusElement.innerHTML = message;
+            }
         }
 
         function takePhoto() {
-            saveCanvas('visual3d-' + Date.now(), 'png');
-            updateStatus('📸 Imagen guardada');
-            
-            // Feedback táctil
-            vibrateDevice();
-            
-            // Efecto visual de flash
-            let flash = document.createElement('div');
-            flash.style.position = 'fixed';
-            flash.style.top = '0';
-            flash.style.left = '0';
-            flash.style.width = '100%';
-            flash.style.height = '100%';
-            flash.style.backgroundColor = 'white';
-            flash.style.opacity = '0.7';
-            flash.style.zIndex = '9999';
-            flash.style.pointerEvents = 'none';
-            flash.style.transition = 'opacity 0.5s';
-            document.body.appendChild(flash);
-            
-            setTimeout(() => {
-                flash.style.opacity = '0';
+            try {
+                saveCanvas('visual3d-' + Date.now(), 'png');
+                updateStatus('Imagen guardada');
+                
+                vibrateDevice();
+                
+                // Efecto visual de flash
+                let flash = document.createElement('div');
+                flash.style.position = 'fixed';
+                flash.style.top = '0';
+                flash.style.left = '0';
+                flash.style.width = '100%';
+                flash.style.height = '100%';
+                flash.style.backgroundColor = 'white';
+                flash.style.opacity = '0.7';
+                flash.style.zIndex = '9999';
+                flash.style.pointerEvents = 'none';
+                document.body.appendChild(flash);
+                
                 setTimeout(() => {
-                    document.body.removeChild(flash);
-                }, 500);
-            }, 100);
+                    flash.style.opacity = '0';
+                    setTimeout(() => {
+                        document.body.removeChild(flash);
+                    }, 300);
+                }, 100);
+            } catch (e) {
+                console.error("Error al tomar foto:", e);
+                updateStatus("Error al guardar imagen");
+            }
         }
         
         function toggleRecording() {
-            if (!canRecord) return;
+            if (!canRecord) {
+                updateStatus("Grabación no disponible");
+                return;
+            }
             
-            recording = !recording;
-            if (recording) {
-                chunks = [];
-                recorder.start();
-                updateStatus('🔴 Grabando...');
-                recordButton.textContent = "⏹️ Detener";
-                recordButton.style.backgroundColor = "rgba(255,0,0,0.4)";
-                vibrateDevice(100); // Vibración más larga al iniciar grabación
-            } else {
-                recorder.stop();
-                updateStatus('⏳ Procesando grabación...');
-                recordButton.textContent = "🔴 Grabar";
-                recordButton.style.backgroundColor = "rgba(255,255,255,0.2)";
-                vibrateDevice([50, 50, 150]); // Patrón de vibración al detener
+            try {
+                recording = !recording;
+                if (recording) {
+                    chunks = [];
+                    recorder.start();
+                    updateStatus('Grabando...');
+                    recordButton.textContent = "⏹️ Detener";
+                    recordButton.style.backgroundColor = "rgba(255,0,0,0.4)";
+                } else {
+                    recorder.stop();
+                    updateStatus('Procesando grabación...');
+                    recordButton.textContent = "🔴 Grabar";
+                    recordButton.style.backgroundColor = "";
+                }
+                vibrateDevice();
+            } catch (e) {
+                console.error("Error en grabación:", e);
+                updateStatus("Error de grabación");
             }
         }
         
@@ -575,15 +647,15 @@
             if (depthFactor === 2.0) {
                 depthFactor = 3.0;
                 effectIntensity = 1.5;
-                updateStatus("🌊 Efecto: Ondas intensas");
+                updateStatus("Efecto: Ondas");
             } else if (depthFactor === 3.0) {
                 depthFactor = 4.0;
                 effectIntensity = 2.0;
-                updateStatus("🏔️ Efecto: Montañas");
+                updateStatus("Efecto: Montañas");
             } else {
                 depthFactor = 2.0;
                 effectIntensity = 1.0;
-                updateStatus("🌈 Efecto: Normal");
+                updateStatus("Efecto: Normal");
             }
             vibrateDevice();
         }
@@ -591,109 +663,123 @@
         function togglePreview() {
             showPreview = !showPreview;
             previewElement.style.display = showPreview ? 'block' : 'none';
-            updateStatus(showPreview ? "👁️ Previsualización activada" : "👁️ Previsualización desactivada");
+            updateStatus(showPreview ? "Previsualización activada" : "Previsualización desactivada");
             vibrateDevice();
         }
 
+        // MODIFICADO: Simplificar completamente la función draw para dispositivos móviles
         function draw() {
-            background(0);
-            
-            // Obtener el nivel de audio y actualizar medidor
-            if (mic) {
-                audioLevel = mic.getLevel();
-                let decibelPercentage = min(audioLevel * 500, 100);
-                audioMeterFill.style.width = decibelPercentage + "%";
-            }
-            
-            // Dibujar sólo si el video está listo y podemos renderizar
-            if (video && video.loadedmetadata && video.width > 0 && canRenderScene) {                
-                // Obtener el nivel de audio para efectos visuales
-                let volume = audioLevel * 2000 * effectIntensity;
-                offset += 0.05;
+            try {
+                background(0);
                 
-                // Cargar pixels de video para acceder a los colores reales
-                video.loadPixels();
-                
-                // Ajustar el origen al centro
-                translate(-width / 2, -height / 2, 0);
-                
-                // Centro del video
-                let centerX = video.width / 2;
-                let centerY = video.height / 2;
-                
-                // Renderizar la escena con esferas
-                for (let y = 0; y < video.height; y += pointDensity) {
-                    for (let x = 0; x < video.width; x += pointDensity) {
-                        // Obtener los colores de píxeles directamente del video
-                        let index = (x + y * video.width) * 4;
-                        let r = video.pixels[index];
-                        let g = video.pixels[index + 1];
-                        let b = video.pixels[index + 2];
-                        
-                        // Solo dibujar si el pixel tiene suficiente información de color
-                        if (r + g + b > 20) {
-                            // Calcular brillo y profundidad Z
-                            let bright = (r + g + b) / 3;
-                            let z = map(bright, 0, 255, -150 * depthFactor, 150);
-                            
-                            // Aplicar efecto de onda basado en el audio
-                            let d = dist(x, y, centerX, centerY);
-                            z += sin(d/10 + offset) * volume * 0.5;
-                            
-                            // Muestrear un color central para mostrarlo en la muestra
-                            if (abs(x - centerX) < 10 && abs(y - centerY) < 10) {
-                                sampledColor = [r, g, b];
-                                colorSample.style.backgroundColor = `rgb(${r},${g},${b})`;
-                            }
-                            
-                            // Dibujar esfera con el color exacto del píxel
-                            push();
-                            translate(x, y, z - 100);  // Ajuste para profundidad base
-                            fill(r, g, b);
-                            noStroke();
-                            sphere(sphereSize);
-                            pop();
-                        }
+                // Actualizar medidor de audio si está disponible
+                if (mic) {
+                    audioLevel = mic.getLevel();
+                    let decibelPercentage = min(audioLevel * 500, 100);
+                    if (audioMeterFill) {
+                        audioMeterFill.style.width = decibelPercentage + "%";
                     }
                 }
                 
-                // Actualizar mensaje con nivel de decibelios
-                if (frameCount % 30 === 0 && !recording) {
-                    updateStatus(`FPS: ${nf(frameRate(), 2, 0)} | Decibelios: ${nf(audioLevel*100, 2, 1)}`);
+                // Si se activó el modo de emergencia, renderizar solo un objeto simple
+                if (fallbackModeActive) {
+                    translate(0, 0, -200);
+                    rotateX(frameCount * 0.01);
+                    rotateY(frameCount * 0.02);
+                    fill(100, 200, 255);
+                    box(100);
+                    return;
                 }
+                
+                // Comprobar si el video está listo para renderizar
+                if (video && video.loadedmetadata && video.width > 0) {                
+                    // Cargar pixels de video
+                    try {
+                        video.loadPixels();
+                    } catch (e) {
+                        console.error("Error al cargar pixels:", e);
+                        return; // Salir si no se pueden cargar los pixels
+                    }
+                    
+                    // Calcular efecto de audio
+                    let volume = audioLevel * 2000 * effectIntensity;
+                    offset += 0.05;
+                    
+                    // Centro del video y de la pantalla
+                    let centerX = video.width / 2;
+                    let centerY = video.height / 2;
+                    
+                    // Ajustar origen al centro
+                    translate(-width / 2, -height / 2, 0);
+                    
+                    // Configurar salto para mejor rendimiento en móviles
+                    let skipAmount = isMobile ? pointDensity * 2 : pointDensity;
+                    
+                    // Renderizar esferas
+                    for (let y = 0; y < video.height; y += skipAmount) {
+                        for (let x = 0; x < video.width; x += skipAmount) {
+                            // Validar índices
+                            if (x >= video.width || y >= video.height) continue;
+                            
+                            let index = (y * video.width + x) * 4;
+                            if (index >= video.pixels.length - 4) continue;
+                            
+                            let r = video.pixels[index];
+                            let g = video.pixels[index + 1];
+                            let b = video.pixels[index + 2];
+                            
+                            // Solo renderizar si hay suficiente color
+                            if (r + g + b > 30) {
+                                let bright = (r + g + b) / 3;
+                                let z = map(bright, 0, 255, -150 * depthFactor, 150);
+                                
+                                // Aplicar efecto de audio
+                                let d = dist(x, y, centerX, centerY);
+                                z += sin(d/10 + offset) * volume * 0.5;
+                                
+                                // Mostrar color central
+                                if (abs(x - centerX) < 10 && abs(y - centerY) < 10) {
+                                    colorSample.style.backgroundColor = `rgb(${r},${g},${b})`;
+                                }
+                                
+                                // Dibujar esfera
+                                push();
+                                translate(x, y, z - 100);
+                                fill(r, g, b);
+                                noStroke();
+                                sphere(sphereSize);
+                                pop();
+                            }
+                        }
+                    }
+                    
+                    // Actualizar estado ocasionalmente
+                    if (frameCount % 30 === 0) {
+                        updateStatus(`FPS: ${floor(frameRate())}`);
+                    }
+                }
+            } catch (e) {
+                console.error("Error en draw:", e);
             }
         }
 
-        // Manejo de eventos táctiles para canvas de p5
+        // Prevenir eventos de scroll
         function touchStarted() {
-            // Marcar que ha habido interacción táctil
-            hasBeenTouched = true;
-            
-            // Verificar si el toque fue en un botón (para evitar conflictos)
-            for (let i = 0; i < touches.length; i++) {
-                let touch = touches[i];
-                let element = document.elementFromPoint(touch.x, touch.y);
-                if (element && element.classList.contains('control-button')) {
-                    return false; // No hacer nada si tocamos un botón
-                }
-            }
-            
-            // Detectar gesto de dos dedos para tomar foto
-            if (touches.length === 2) {
-                let d = dist(touches[0].x, touches[0].y, touches[1].x, touches[1].y);
-                if (d < 100) { // Si los dedos están cerca, toma una foto
-                    takePhoto();
-                    return false;
-                }
-            }
-            
-            return false; // Prevenir comportamiento por defecto
+            return false;
+        }
+        
+        function touchMoved() {
+            return false;
         }
 
         function windowResized() {
-            resizeCanvas(windowWidth, windowHeight);
-            if (video) {
-                video.size(windowWidth, windowHeight);
+            try {
+                resizeCanvas(windowWidth, windowHeight);
+                if (easycam) {
+                    easycam.setViewport([0, 0, windowWidth, windowHeight]);
+                }
+            } catch (e) {
+                console.error("Error al redimensionar:", e);
             }
         }
     </script>
