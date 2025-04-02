@@ -206,7 +206,7 @@
     <script src="https://cdn.jsdelivr.net/npm/p5.easycam@1.0.0/p5.easycam.min.js"></script>
 
     <script>
-        // Variables globales (sin cambios)
+        // Variables globales
         let canvas;
         let video;
         let mic;
@@ -227,28 +227,36 @@
         let easycam;
         let hasBeenTouched = false;
         
-        // Variables para efectos 3D (sin cambios)
+        // MODIFICADO: Ajustes para rendimiento en móviles
         let depthFactor = 2.0;     
         let sphereSize = 3;        
-        let pointDensity = 5;      
-        let mobilePointDensity = 8; 
-        let effectIntensity = 1.0;  
+        let pointDensity = 5;      // Valor para escritorio
+        let mobilePointDensity = 12; // AUMENTADO: Mayor salto entre puntos en móviles
+        let tabletPointDensity = 10; // NUEVO: Valor específico para tablets
+        let lowEndDeviceDensity = 16; // NUEVO: Valor para dispositivos de gama baja
+        let effectIntensity = 1.0; 
         
-        // Variables de renderizado (sin cambios)
+        // NUEVO: Variables para detección de dispositivos
+        let isLowEndDevice = false;
+        let isTablet = false;
+        let isIOS = false;
+        let isAndroid = false;
+        
+        // Variables de renderizado
         let audioLevel = 0;
         let sampledColor = [255, 255, 255];
         
-        // Variables para manejo de eventos de cámara (sin cambios)
+        // Variables para manejo de eventos de cámara
         let canUseCameras = false;
         let canRenderScene = false;
 
-        // Elementos del DOM - referencias globales (sin cambios)
+        // Elementos del DOM - referencias globales
         let photoButton, recordButton, effectButton, previewButton, cameraButton;
         
-        // Detectar vibración (sin cambios)
+        // Detectar vibración
         const canVibrate = "vibrate" in navigator;
         
-        // Función para dar feedback táctil (sin cambios)
+        // Función para dar feedback táctil
         function vibrateDevice(duration = 50) {
             if (canVibrate) {
                 try {
@@ -259,7 +267,7 @@
             }
         }
         
-        // Función mejorada para animación de botones (sin cambios)
+        // Función mejorada para animación de botones
         function animateButton(button) {
             button.classList.add("button-pressed");
             setTimeout(() => {
@@ -268,7 +276,7 @@
         }
         
         window.onload = function() {
-            // Configurar referencias a elementos DOM (sin cambios)
+            // Configurar referencias a elementos DOM
             statusElement = document.getElementById('status');
             loadingElement = document.getElementById('loading');
             loadingTextElement = document.getElementById('loadingText');
@@ -276,26 +284,26 @@
             colorSample = document.getElementById('colorSample');
             previewElement = document.getElementById('preview');
             
-            // Configurar botones (sin cambios)
+            // Configurar botones
             photoButton = document.getElementById('photoButton');
             recordButton = document.getElementById('recordButton');
             effectButton = document.getElementById('effectButton');
             previewButton = document.getElementById('previewButton');
             cameraButton = document.getElementById('cameraButton');
             
-            // Detectar tipo de dispositivo para optimizar configuración (sin cambios)
+            // Detectar tipo de dispositivo para optimizar configuración
             detectDevice();
             
-            // Detectar si el navegador soporta MediaRecorder (sin cambios)
+            // Detectar si el navegador soporta MediaRecorder
             canRecord = (typeof MediaRecorder !== 'undefined');
             if (!canRecord) {
                 recordButton.style.display = 'none';
             }
             
-            // MODIFICADO: Implementación simplificada para soportar mejor los eventos táctiles
+            // Configuración mejorada de controles táctiles
             setupImprovedTouchControls();
             
-            // Prevenir gestos del navegador en dispositivos táctiles (sin cambios)
+            // Prevenir gestos del navegador en dispositivos táctiles
             document.addEventListener('gesturestart', function(e) {
                 e.preventDefault();
             });
@@ -309,7 +317,7 @@
             updateLoadingText("Configuración inicial completada");
         };
         
-        // MODIFICADO: Configuración mejorada de controles táctiles
+        // Configuración mejorada de controles táctiles
         function setupImprovedTouchControls() {
             // Configuración simplificada para botones
             photoButton.addEventListener('click', function(e) {
@@ -338,7 +346,7 @@
             });
             
             // Para dispositivos móviles, también asignar eventos touchstart
-            if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+            if (isMobile) {
                 const addTouchHandler = (button, action) => {
                     button.addEventListener('touchstart', function(e) {
                         e.preventDefault();
@@ -356,24 +364,45 @@
             }
         }
 
-        // El resto del código se mantiene exactamente igual
+        // MODIFICADO: Detección mejorada de dispositivos
         function detectDevice() {
-            // Detectar dispositivo: móvil, tablet o desktop
             const userAgent = navigator.userAgent.toLowerCase();
-            const isMobileDevice = /android|webos|iphone|ipod|blackberry|iemobile|opera mini/.test(userAgent);
-            const isTablet = /ipad|android/.test(userAgent) && !/mobile/.test(userAgent);
             
-            isMobile = isMobileDevice || isTablet;
+            // Detectar tipos de dispositivo
+            isIOS = /iphone|ipad|ipod/.test(userAgent);
+            isAndroid = /android/.test(userAgent);
+            isTablet = /ipad/.test(userAgent) || 
+                       (/android/.test(userAgent) && !/mobile/.test(userAgent));
+            isMobile = /android|webos|iphone|ipod|blackberry|iemobile|opera mini/.test(userAgent);
             
-            if (isMobileDevice) {
-                pointDensity = mobilePointDensity;
-                sphereSize = 2.5;  // Esferas más pequeñas en móviles para rendimiento
+            // Detectar dispositivos de gama baja
+            isLowEndDevice = (
+                // iOS más antiguos
+                /iphone\s(4|5|6)/.test(userAgent) || 
+                // Detectar algunos dispositivos Android de gama baja
+                /android 4/.test(userAgent) || 
+                /android 5/.test(userAgent) ||
+                // Samsung Galaxy de series A y J antiguas
+                /sm-a[1-3]/.test(userAgent) || 
+                /sm-j[1-5]/.test(userAgent)
+            );
+            
+            // Elegir densidad según el tipo de dispositivo
+            if (isLowEndDevice) {
+                pointDensity = lowEndDeviceDensity;
+                sphereSize = 2.5;
+                console.log("Dispositivo de gama baja detectado");
             } else if (isTablet) {
-                pointDensity = 6;
+                pointDensity = tabletPointDensity;
                 sphereSize = 3;
+                console.log("Tablet detectada");
+            } else if (isMobile) {
+                pointDensity = mobilePointDensity;
+                sphereSize = 2.5;
+                console.log("Móvil detectado");
             }
             
-            updateLoadingText("Detectado: " + (isMobileDevice ? "Dispositivo móvil" : isTablet ? "Tablet" : "Escritorio"));
+            updateLoadingText(`Dispositivo: ${isIOS ? "iOS" : isAndroid ? "Android" : "Desktop"}${isLowEndDevice ? " (gama baja)" : ""}${isTablet ? " (tablet)" : ""}`);
         }
 
         function updateLoadingText(text) {
@@ -390,16 +419,16 @@
             updateLoadingText("Creando lienzo...");
             canvas = createCanvas(windowWidth, windowHeight, WEBGL);
             
-            // Inicializar EasyCam con parámetros adaptados para mobiles y táctiles
+            // Inicializar EasyCam con parámetros adaptados
             easycam = createEasyCam();
             easycam.setDistanceMin(30);
             easycam.setDistanceMax(3000);
             
             // Ajustes especiales de EasyCam para dispositivos táctiles
             if (isMobile) {
-                easycam.setRotationConstraint(true, true, true); // Restringir rotación para mejor control
-                easycam.setPanConstraint(true, true, true); // Restringir panning
-                easycam.setDampingScale(0.7); // Menos inercia para mejor control
+                easycam.setRotationConstraint(true, true, true);
+                easycam.setPanConstraint(true, true, true);
+                easycam.setDampingScale(0.7);
             }
             
             updateLoadingText("Solicitando acceso a la cámara...");
@@ -426,7 +455,15 @@
                 setupRecorder();
             }
             
-            frameRate(isMobile ? 30 : 60);
+            // MODIFICADO: Reducir framerate en dispositivos de gama baja
+            if (isLowEndDevice) {
+                frameRate(24);
+            } else if (isMobile) {
+                frameRate(30);
+            } else {
+                frameRate(60);
+            }
+            
             pixelDensity(1);
             
             updateLoadingText("¡Todo listo!");
@@ -484,7 +521,7 @@
             startCapture(usingBackCamera);
             
             // Feedback visual y táctil
-            vibrateDevice(100); // Vibración más larga para cambio de cámara
+            vibrateDevice(100);
         }
 
         function setupRecorder() {
@@ -561,13 +598,13 @@
                 updateStatus('🔴 Grabando...');
                 recordButton.textContent = "⏹️ Detener";
                 recordButton.style.backgroundColor = "rgba(255,0,0,0.4)";
-                vibrateDevice(100); // Vibración más larga al iniciar grabación
+                vibrateDevice(100);
             } else {
                 recorder.stop();
                 updateStatus('⏳ Procesando grabación...');
                 recordButton.textContent = "🔴 Grabar";
                 recordButton.style.backgroundColor = "rgba(255,255,255,0.2)";
-                vibrateDevice([50, 50, 150]); // Patrón de vibración al detener
+                vibrateDevice([50, 50, 150]);
             }
         }
         
@@ -595,6 +632,7 @@
             vibrateDevice();
         }
 
+        // MODIFICADO: Optimización de la función draw para dispositivos móviles
         function draw() {
             background(0);
             
@@ -621,11 +659,19 @@
                 let centerX = video.width / 2;
                 let centerY = video.height / 2;
                 
+                // MODIFICADO: Usar valor de pointDensity según el dispositivo
+                let currentPointDensity = pointDensity;
+                
                 // Renderizar la escena con esferas
-                for (let y = 0; y < video.height; y += pointDensity) {
-                    for (let x = 0; x < video.width; x += pointDensity) {
+                for (let y = 0; y < video.height; y += currentPointDensity) {
+                    for (let x = 0; x < video.width; x += currentPointDensity) {
+                        // Validar índices para evitar errores
+                        if (x >= video.width || y >= video.height) continue;
+                        
+                        let index = (y * video.width + x) * 4;
+                        if (index >= video.pixels.length - 4) continue;
+                        
                         // Obtener los colores de píxeles directamente del video
-                        let index = (x + y * video.width) * 4;
                         let r = video.pixels[index];
                         let g = video.pixels[index + 1];
                         let b = video.pixels[index + 2];
